@@ -120,3 +120,4 @@ build/
 *.app
 *.framework
 *.xcarchive
+Pandoc.xcodeproj/project.xcworkspace/
