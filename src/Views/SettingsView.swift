@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("pandocServerURL") private var serverURL = "http://localhost:3030"
+    @AppStorage("conversionMode") private var conversionMode = ConversionMode.auto.rawValue
     @AppStorage("defaultInputFormat") private var defaultInputFormat = "markdown"
     @AppStorage("defaultOutputFormat") private var defaultOutputFormat = "html"
     @AppStorage("autoDetectFormat") private var autoDetectFormat = true
@@ -14,6 +15,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Conversion Mode
+                conversionModeSection
+
                 // Server Configuration
                 serverSection
 
@@ -27,6 +31,36 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
+        }
+    }
+
+    // MARK: - Conversion Mode Section
+
+    private var conversionModeSection: some View {
+        Section {
+            Picker("Conversion Engine", selection: $conversionMode) {
+                ForEach(ConversionMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode.rawValue)
+                }
+            }
+
+            // Show supported local formats
+            if conversionMode != ConversionMode.serverOnly.rawValue {
+                NavigationLink {
+                    LocalFormatsView()
+                } label: {
+                    HStack {
+                        Text("Supported Local Formats")
+                        Spacer()
+                        Text("\(LocalConverter.supportedInputFormats.count) in, \(LocalConverter.supportedOutputFormats.count) out")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Label("Conversion Engine", systemImage: "cpu")
+        } footer: {
+            Text(ConversionMode(rawValue: conversionMode)?.description ?? "")
         }
     }
 

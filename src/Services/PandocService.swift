@@ -1,9 +1,28 @@
 import Foundation
 
-/// Service for communicating with Pandoc server
+/// Conversion mode preference
+enum ConversionMode: String, CaseIterable, Identifiable {
+    case auto = "Auto"
+    case localOnly = "Local Only"
+    case serverOnly = "Server Only"
+
+    var id: String { rawValue }
+
+    var description: String {
+        switch self {
+        case .auto: return "Use local conversion when possible, fall back to server"
+        case .localOnly: return "Only use local conversion (limited formats)"
+        case .serverOnly: return "Always use server (requires pandoc-server)"
+        }
+    }
+}
+
+/// Service for document conversion - uses local conversion when possible, falls back to server
 actor PandocService {
     private let session: URLSession
     private var baseURL: URL
+    private let localConverter = LocalConverter()
+    var conversionMode: ConversionMode = .auto
 
     init(baseURL: URL = URL(string: "http://localhost:3030")!) {
         self.baseURL = baseURL
@@ -18,8 +37,79 @@ actor PandocService {
         self.baseURL = url
     }
 
-    /// Convert a document using Pandoc server
+    func setConversionMode(_ mode: ConversionMode) {
+        self.conversionMode = mode
+    }
+
+    /// Convert a document - tries local conversion first if supported
     func convert(
+        document: ConversionDocument,
+        from inputFormat: DocumentFormat,
+        to outputFormat: DocumentFormat,
+        options: ConversionOptions
+    ) async throws -> ConversionResult {
+        let text = document.textContent ?? ""
+
+        // Determine if we should try local conversion
+        let canConvertLocally = LocalConverter.canConvertLocally(from: inputFormat, to: outputFormat)
+
+        switch conversionMode {
+        case .localOnly:
+            if canConvertLocally {
+                return try await convertLocally(text: text, from: inputFormat, to: outputFormat, options: options)
+            } else {
+                throw PandocError.conversionFailed("Local conversion not supported for \(inputFormat.displayName) to \(outputFormat.displayName)")
+            }
+
+        case .serverOnly:
+            return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+
+        case .auto:
+            if canConvertLocally {
+                // Try local first
+                do {
+                    return try await convertLocally(text: text, from: inputFormat, to: outputFormat, options: options)
+                } catch {
+                    // Fall back to server
+                    return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+                }
+            } else {
+                return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+            }
+        }
+    }
+
+    /// Convert using local converter
+    private func convertLocally(
+        text: String,
+        from inputFormat: DocumentFormat,
+        to outputFormat: DocumentFormat,
+        options: ConversionOptions
+    ) async throws -> ConversionResult {
+        let output = try await localConverter.convert(
+            text: text,
+            from: inputFormat,
+            to: outputFormat,
+            options: options
+        )
+
+        // Save output to temporary file
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(outputFormat.fileExtension)
+
+        try output.write(to: outputURL, atomically: true, encoding: .utf8)
+
+        return ConversionResult(
+            success: true,
+            outputURL: outputURL,
+            preview: String(output.prefix(2000)),
+            errorMessage: nil
+        )
+    }
+
+    /// Convert using Pandoc server
+    private func convertWithServer(
         document: ConversionDocument,
         from inputFormat: DocumentFormat,
         to outputFormat: DocumentFormat,
