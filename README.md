@@ -5,19 +5,20 @@ A modern iOS front-end for [Pandoc](https://github.com/jgm/pandoc), the universa
 ## Features
 
 - **Universal Document Conversion**: Convert between 50+ input formats and 80+ output formats
+- **Reference Templates**: Use custom DOCX, ODT, or PPTX templates for styled output
+- **Save to Files**: Export converted documents directly to the iOS Files app
 - **Liquid Glass UI**: Beautiful, modern interface using Apple's new design language
-- **Live Preview**: See your converted documents in real-time
+- **Live Preview**: See your converted documents before saving
 - **Format Categories**: Organized format picker with Markdown, Documents, Web, Presentations, Academic, and more
 - **Advanced Options**: Full control over Pandoc conversion parameters
 - **Conversion History**: Track all your past conversions
-- **Share & Export**: Easy sharing and saving of converted documents
 
 ## Requirements
 
 - iOS 26.0+
 - Xcode 26.0+
 - Swift 6.0+
-- Pandoc Server (for document conversion)
+- Pandoc Server (for full format support)
 
 ## Installation
 
@@ -36,7 +37,7 @@ A modern iOS front-end for [Pandoc](https://github.com/jgm/pandoc), the universa
 
 ## Setting Up Pandoc Server
 
-This app requires a Pandoc server to perform document conversions. You can run one locally:
+The app includes local conversion support for common formats (Markdown ↔ HTML ↔ Plain Text). For full format support, run a Pandoc server:
 
 ### Option 1: Using Homebrew (macOS)
 
@@ -58,29 +59,45 @@ cabal install pandoc-cli
 pandoc-server --port 3030
 ```
 
+## App Structure
+
+The app has four main tabs:
+
+| Tab | Description |
+|-----|-------------|
+| **Convert** | Import documents, select formats, and convert |
+| **Templates** | Manage reference documents for DOCX/ODT/PPTX styling |
+| **History** | View past conversions |
+| **Settings** | Configure server URL and conversion preferences |
+
 ## Project Structure
 
 ```
 ios-pandoc/
 ├── src/
-│   ├── PandocApp.swift           # App entry point
+│   ├── PandocApp.swift              # App entry point & AppState
 │   ├── Models/
-│   │   ├── DocumentFormat.swift   # Supported formats
-│   │   └── ConversionRecord.swift # Conversion records
+│   │   ├── DocumentFormat.swift     # Supported formats enum
+│   │   ├── ConversionRecord.swift   # Conversion history & options
+│   │   ├── ReferenceTemplate.swift  # Template model for DOCX/ODT/PPTX
+│   │   └── ConvertedDocument.swift  # FileDocument for export
 │   ├── Views/
-│   │   ├── ContentView.swift      # Main tab view
-│   │   ├── ConvertView.swift      # Document conversion
-│   │   ├── HistoryView.swift      # Conversion history
-│   │   ├── SettingsView.swift     # App settings
-│   │   └── Components/            # Reusable UI components
+│   │   ├── ContentView.swift        # Main tab navigation
+│   │   ├── ConvertView.swift        # Document conversion UI
+│   │   ├── TemplatesView.swift      # Template management UI
+│   │   ├── HistoryView.swift        # Conversion history
+│   │   ├── SettingsView.swift       # App settings
+│   │   └── Components/              # Reusable UI components
 │   ├── ViewModels/
-│   │   └── ConvertViewModel.swift # Conversion logic
+│   │   ├── ConvertViewModel.swift   # Conversion logic
+│   │   └── TemplatesViewModel.swift # Template management logic
 │   ├── Services/
-│   │   └── PandocService.swift    # Pandoc server API
-│   └── Assets.xcassets/           # App assets
-├── data/                          # Templates & resources
-├── doc/                           # Documentation
-└── test/                          # Tests
+│   │   ├── PandocService.swift      # Pandoc server API
+│   │   ├── LocalConverter.swift     # Native iOS conversion
+│   │   └── TemplateStorage.swift    # Template persistence
+│   └── Assets.xcassets/             # App assets
+├── data/                            # Sample files
+└── doc/                             # Documentation
 ```
 
 ## Supported Formats
@@ -100,41 +117,22 @@ All input formats plus:
 - **PDF** (via LaTeX)
 - **Plain Text**
 
-## Liquid Glass Design
+## Reference Templates
 
-This app showcases iOS 26's new Liquid Glass design language:
+Pandoc supports custom styling for DOCX, ODT, and PPTX output via reference documents. To use:
 
-- **Glass Effects**: Translucent materials that refract and reflect light
-- **Adaptive Tinting**: UI adapts to content underneath
-- **Interactive Feedback**: Touch interactions with shimmer and bounce
-- **Fluid Transitions**: Smooth morphing between UI states
+1. Go to the **Templates** tab
+2. Tap **+** to import a styled .docx, .odt, or .pptx file
+3. When converting to that format, select your template from the picker
+4. The output will use your template's styles (fonts, colors, margins, etc.)
 
-### Key SwiftUI APIs Used
-
-```swift
-// Apply glass effect to views
-View()
-    .glassEffect()
-
-// Group glass elements
-GlassEffectContainer {
-    // Multiple glass views
-}
-
-// Tab bar that minimizes on scroll
-TabView { }
-    .tabBarMinimizeBehavior(.onScrollDown)
-
-// Extra large buttons
-Button("Convert") { }
-    .controlSize(.extraLarge)
-```
+**Creating a template**: Start with a document that has the styles you want, then import it. Pandoc uses the styles but ignores the content.
 
 ## Architecture
 
 The app follows MVVM architecture with:
 
-- **Models**: Pure data types for formats, records, and options
+- **Models**: Pure data types for formats, records, templates, and options
 - **Views**: SwiftUI views with Liquid Glass styling
 - **ViewModels**: @Observable classes managing state and logic
 - **Services**: Actor-based async service layer
@@ -146,12 +144,13 @@ The app follows MVVM architecture with:
 ```swift
 let service = PandocService()
 
-// Convert a document
+// Convert a document with optional template
 let result = try await service.convert(
     document: document,
     from: .markdown,
-    to: .html,
-    options: ConversionOptions()
+    to: .docx,
+    options: ConversionOptions(),
+    referenceTemplate: myTemplate  // Optional
 )
 
 // Check server health
@@ -169,10 +168,6 @@ options.highlightStyle = "pygments"
 options.variables = ["title": "My Document"]
 options.metadata = ["author": "John Doe"]
 ```
-
-## Contributing
-
-Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## License
 
