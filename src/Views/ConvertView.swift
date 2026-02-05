@@ -161,19 +161,19 @@ struct ConvertView: View {
                 .font(.headline)
 
             GlassEffectContainer {
-                HStack(spacing: 16) {
+                VStack(spacing: 12) {
                     // Input Format
                     FormatPicker(
                         title: "From",
                         selection: $viewModel.inputFormat,
                         formats: DocumentFormat.inputFormats
                     )
+                    .frame(maxWidth: .infinity)
                     .glassEffect(in: .rect(cornerRadius: 12))
 
-                    Image(systemName: "arrow.right")
+                    Image(systemName: "arrow.down")
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                        .glassEffect()
 
                     // Output Format
                     FormatPicker(
@@ -181,6 +181,7 @@ struct ConvertView: View {
                         selection: $viewModel.outputFormat,
                         formats: DocumentFormat.outputFormats
                     )
+                    .frame(maxWidth: .infinity)
                     .glassEffect(in: .rect(cornerRadius: 12))
                 }
                 .padding(.vertical, 8)
