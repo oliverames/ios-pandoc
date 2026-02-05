@@ -72,20 +72,7 @@ actor LocalConverter {
     // MARK: - Markdown to HTML
 
     private func markdownToHTML(_ markdown: String, options: ConversionOptions) async throws -> String {
-        // Use iOS's native AttributedString markdown parsing
-        let attributedString: AttributedString
-        do {
-            attributedString = try AttributedString(markdown: markdown, options: .init(
-                allowsExtendedAttributes: true,
-                interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            ))
-        } catch {
-            // Fallback to basic conversion
-            return basicMarkdownToHTML(markdown, options: options)
-        }
-
-        // For full HTML, use our custom converter
+        // Use our custom regex-based converter for full HTML output
         return basicMarkdownToHTML(markdown, options: options)
     }
 

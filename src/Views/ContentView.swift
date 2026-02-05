@@ -7,12 +7,14 @@ struct ContentView: View {
 
     enum Tab: String, CaseIterable {
         case convert = "Convert"
+        case templates = "Templates"
         case history = "History"
         case settings = "Settings"
 
         var icon: String {
             switch self {
             case .convert: return "doc.text.magnifyingglass"
+            case .templates: return "doc.badge.gearshape"
             case .history: return "clock.arrow.circlepath"
             case .settings: return "gear"
             }
@@ -26,6 +28,8 @@ struct ContentView: View {
                     switch tab {
                     case .convert:
                         ConvertView()
+                    case .templates:
+                        TemplatesView()
                     case .history:
                         HistoryView()
                     case .settings:

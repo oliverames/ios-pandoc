@@ -46,15 +46,22 @@ actor PandocService {
         document: ConversionDocument,
         from inputFormat: DocumentFormat,
         to outputFormat: DocumentFormat,
-        options: ConversionOptions
+        options: ConversionOptions,
+        referenceTemplate: ReferenceTemplate? = nil
     ) async throws -> ConversionResult {
         let text = document.textContent ?? ""
 
+        // If a reference template is provided, we must use the server
+        let hasTemplate = referenceTemplate != nil
+
         // Determine if we should try local conversion
-        let canConvertLocally = LocalConverter.canConvertLocally(from: inputFormat, to: outputFormat)
+        let canConvertLocally = !hasTemplate && LocalConverter.canConvertLocally(from: inputFormat, to: outputFormat)
 
         switch conversionMode {
         case .localOnly:
+            if hasTemplate {
+                throw PandocError.conversionFailed("Reference templates require the Pandoc server")
+            }
             if canConvertLocally {
                 return try await convertLocally(text: text, from: inputFormat, to: outputFormat, options: options)
             } else {
@@ -62,7 +69,7 @@ actor PandocService {
             }
 
         case .serverOnly:
-            return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+            return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options, referenceTemplate: referenceTemplate)
 
         case .auto:
             if canConvertLocally {
@@ -71,10 +78,10 @@ actor PandocService {
                     return try await convertLocally(text: text, from: inputFormat, to: outputFormat, options: options)
                 } catch {
                     // Fall back to server
-                    return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+                    return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options, referenceTemplate: referenceTemplate)
                 }
             } else {
-                return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options)
+                return try await convertWithServer(document: document, from: inputFormat, to: outputFormat, options: options, referenceTemplate: referenceTemplate)
             }
         }
     }
@@ -113,7 +120,8 @@ actor PandocService {
         document: ConversionDocument,
         from inputFormat: DocumentFormat,
         to outputFormat: DocumentFormat,
-        options: ConversionOptions
+        options: ConversionOptions,
+        referenceTemplate: ReferenceTemplate? = nil
     ) async throws -> ConversionResult {
         let endpoint = baseURL.appendingPathComponent("")
 
@@ -121,6 +129,17 @@ actor PandocService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Prepare reference document if provided
+        var referenceDocFilename: String?
+        var files: [String: String]?
+
+        if let template = referenceTemplate {
+            let filename = "reference.\(template.templateType.fileExtension)"
+            referenceDocFilename = filename
+            let base64Data = try template.base64EncodedData()
+            files = [filename: base64Data]
+        }
 
         // Build request body according to Pandoc server API
         let requestBody = PandocRequest(
@@ -134,11 +153,12 @@ actor PandocService {
             highlightStyle: options.highlightStyle,
             template: options.template,
             variables: options.variables.isEmpty ? nil : options.variables,
-            metadata: options.metadata.isEmpty ? nil : options.metadata
+            metadata: options.metadata.isEmpty ? nil : options.metadata,
+            referenceDoc: referenceDocFilename,
+            files: files
         )
 
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(requestBody)
 
         do {
@@ -217,12 +237,15 @@ struct PandocRequest: Encodable {
     let template: String?
     let variables: [String: String]?
     let metadata: [String: String]?
+    let referenceDoc: String?
+    let files: [String: String]?
 
     enum CodingKeys: String, CodingKey {
-        case text, from, to, standalone, toc, template, variables, metadata
+        case text, from, to, standalone, toc, template, variables, metadata, files
         case numberSections = "number-sections"
         case wrapText = "wrap"
         case highlightStyle = "highlight-style"
+        case referenceDoc = "reference-doc"
     }
 }
 

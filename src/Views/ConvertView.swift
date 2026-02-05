@@ -7,7 +7,6 @@ struct ConvertView: View {
     @State private var viewModel = ConvertViewModel()
     @State private var showingDocumentPicker = false
     @State private var showingTextInput = false
-    @Namespace private var glassNamespace
 
     var body: some View {
         NavigationStack {
@@ -18,6 +17,11 @@ struct ConvertView: View {
 
                     // Format Selection
                     formatSelectionSection
+
+                    // Template Selection (for DOCX/ODT/PPTX)
+                    if viewModel.supportsTemplate {
+                        templateSelectionSection
+                    }
 
                     // Options Section
                     optionsSection
@@ -56,6 +60,20 @@ struct ConvertView: View {
             }
             .sheet(isPresented: $showingTextInput) {
                 TextInputSheet(viewModel: viewModel)
+            }
+            .fileExporter(
+                isPresented: $viewModel.showingExporter,
+                document: viewModel.convertedDocument,
+                contentType: viewModel.outputFormat.utType,
+                defaultFilename: viewModel.suggestedFilename
+            ) { result in
+                handleExportResult(result)
+            }
+            .task {
+                await appState.loadTemplates()
+            }
+            .onChange(of: viewModel.outputFormat) {
+                viewModel.outputFormatChanged()
             }
         }
     }
@@ -156,7 +174,6 @@ struct ConvertView: View {
                         .font(.title2)
                         .foregroundStyle(.secondary)
                         .glassEffect()
-                        .glassEffectID(glassNamespace)
 
                     // Output Format
                     FormatPicker(
@@ -167,6 +184,47 @@ struct ConvertView: View {
                     .glassEffect(in: .rect(cornerRadius: 12))
                 }
                 .padding(.vertical, 8)
+            }
+        }
+    }
+
+    // MARK: - Template Selection
+
+    private var templateSelectionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Template", systemImage: "doc.badge.gearshape")
+                .font(.headline)
+
+            GlassEffectContainer {
+                VStack(spacing: 0) {
+                    let availableTemplates = appState.templates(for: viewModel.outputFormat)
+
+                    if availableTemplates.isEmpty {
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundStyle(.secondary)
+                            Text("No templates available for \(viewModel.outputFormat.displayName)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding()
+                    } else {
+                        Picker("Reference Template", selection: $viewModel.selectedTemplate) {
+                            Text("None (Default)").tag(ReferenceTemplate?.none)
+                            ForEach(availableTemplates) { template in
+                                HStack {
+                                    Image(systemName: template.templateType.icon)
+                                    Text(template.name)
+                                }
+                                .tag(ReferenceTemplate?.some(template))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .padding()
+                    }
+                }
+                .glassEffect(in: .rect(cornerRadius: 16))
             }
         }
     }
@@ -248,12 +306,22 @@ struct ConvertView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if result.success {
                         if let preview = result.preview {
-                            Text(preview)
-                                .font(.system(.body, design: .monospaced))
-                                .lineLimit(10)
+                            ScrollView {
+                                Text(preview)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 200)
                         }
 
-                        HStack {
+                        HStack(spacing: 12) {
+                            Button {
+                                viewModel.showingExporter = true
+                            } label: {
+                                Label("Save to Files", systemImage: "folder")
+                            }
+                            .buttonStyle(.borderedProminent)
+
                             ShareLink(item: result.outputURL ?? URL(fileURLWithPath: "/")) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
@@ -289,6 +357,25 @@ struct ConvertView: View {
         case .success(let urls):
             if let url = urls.first {
                 viewModel.loadDocument(from: url)
+            }
+        case .failure(let error):
+            viewModel.showError(error.localizedDescription)
+        }
+    }
+
+    private func handleExportResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            // Add to conversion history
+            if let document = viewModel.inputDocument {
+                let record = ConversionRecord(
+                    inputFileName: document.fileName,
+                    inputFormat: viewModel.inputFormat,
+                    outputFormat: viewModel.outputFormat,
+                    success: true,
+                    outputURL: url
+                )
+                appState.addConversion(record)
             }
         case .failure(let error):
             viewModel.showError(error.localizedDescription)

@@ -78,6 +78,9 @@ struct ConversionOptions: Codable, Hashable {
     var variables: [String: String] = [:]
     var metadata: [String: String] = [:]
 
+    /// ID of the reference template to use for DOCX/ODT/PPTX output
+    var referenceTemplateID: UUID?
+
     enum WrapOption: String, Codable, CaseIterable {
         case auto
         case none

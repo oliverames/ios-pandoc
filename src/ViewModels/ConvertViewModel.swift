@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// ViewModel for the conversion view
+@MainActor
 @Observable
 final class ConvertViewModel {
     var inputDocument: ConversionDocument?
@@ -12,10 +13,30 @@ final class ConvertViewModel {
     var conversionResult: ConversionResult?
     var errorMessage: String?
 
+    /// Selected reference template for DOCX/ODT/PPTX output
+    var selectedTemplate: ReferenceTemplate?
+
+    /// Controls the file exporter sheet
+    var showingExporter = false
+
+    /// The converted document ready for export
+    var convertedDocument: ConvertedDocument?
+
     private let pandocService = PandocService()
 
     var canConvert: Bool {
         inputDocument != nil && inputFormat != outputFormat
+    }
+
+    /// Whether the current output format supports reference templates
+    var supportsTemplate: Bool {
+        [.docx, .odt, .pptx].contains(outputFormat)
+    }
+
+    /// Suggested filename for export based on input document
+    var suggestedFilename: String {
+        let baseName = inputDocument?.fileName.components(separatedBy: ".").dropLast().joined(separator: ".") ?? "converted"
+        return "\(baseName).\(outputFormat.fileExtension)"
     }
 
     func loadDocument(from url: URL) {
@@ -43,6 +64,7 @@ final class ConvertViewModel {
 
         isConverting = true
         conversionResult = nil
+        convertedDocument = nil
         errorMessage = nil
 
         do {
@@ -50,23 +72,38 @@ final class ConvertViewModel {
                 document: document,
                 from: inputFormat,
                 to: outputFormat,
-                options: options
+                options: options,
+                referenceTemplate: selectedTemplate
             )
 
-            await MainActor.run {
-                conversionResult = result
-                isConverting = false
-            }
-        } catch {
-            await MainActor.run {
-                conversionResult = ConversionResult(
-                    success: false,
-                    outputURL: nil,
-                    preview: nil,
-                    errorMessage: error.localizedDescription
+            conversionResult = result
+
+            // Prepare the converted document for export
+            if result.success, let outputURL = result.outputURL {
+                convertedDocument = try? ConvertedDocument(
+                    url: outputURL,
+                    contentType: outputFormat.utType,
+                    suggestedFilename: suggestedFilename
                 )
-                isConverting = false
             }
+
+            isConverting = false
+        } catch {
+            conversionResult = ConversionResult(
+                success: false,
+                outputURL: nil,
+                preview: nil,
+                errorMessage: error.localizedDescription
+            )
+            isConverting = false
+        }
+    }
+
+    /// Reset selected template when output format changes (if template doesn't support new format)
+    func outputFormatChanged() {
+        if let template = selectedTemplate,
+           !template.templateType.supportedOutputFormats.contains(outputFormat) {
+            selectedTemplate = nil
         }
     }
 
